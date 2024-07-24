@@ -4,6 +4,7 @@ import pulp
 import pandas as pd
 
 st.title('NSF Panel Assignment')
+st.sidebar.title('Inputs')
 
 rankings_csv = st.sidebar.file_uploader("Upload a CSV file with rankings matrix", type = "csv")
 
@@ -198,4 +199,5 @@ if rankings_csv is not None:
         st.table(summary_df.style.format("{:.0f}"))
 
 else:
-    st.error('The rankings matrix CSV file required to run the optimization is empty.')
+    if st.sidebar.button('Optimize'):
+        st.error('The rankings matrix CSV file required to run the optimization is empty.')
