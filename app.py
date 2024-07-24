@@ -65,7 +65,7 @@ if st.sidebar.button('Optimize'):
         for k in range(len(reviewer_idx)):
             st.error(f'Reviewer {reviewer_idx[k]} assigned to Proposal {proposal_idx[k]} (conflict) \n')
     else:
-        st.sidebar.success('No conflicts found in the Review assignments.')
+        st.sidebar.success('No conflicts found in the review assignments.')
 
     fairness_metric = np.zeros((1, int(num_reviewers)))
 
@@ -159,7 +159,7 @@ if st.sidebar.button('Optimize'):
     if not conflict_found:
         st.sidebar.success('No conflicts found in lead assignments.')
 
-    combined_assignments = np.empty((num_proposals, num_reviewers), dtype=object)
+    combined_assignments = np.empty((num_proposals, num_reviewers), '-', dtype=object)
     combined_assignments[:] = ''
 
     for proposal in range(num_proposals):
