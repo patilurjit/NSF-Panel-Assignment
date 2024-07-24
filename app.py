@@ -5,9 +5,9 @@ import pandas as pd
 
 st.title('NSF Panel Assignment')
 
-num_proposals = int(st.sidebar.number_input('Number of proposals'))
-num_reviewers = int(st.sidebar.number_input('Number of reviewers'))
-reviews_per_proposal = int(st.sidebar.number_input('Number of reviews per proposal'))
+num_proposals = int(st.sidebar.number_input('Number of proposals', min_value = 1, step = 1, format = "%d"))
+num_reviewers = int(st.sidebar.number_input('Number of reviewers', min_value = 1, step = 1, format = "%d"))
+reviews_per_proposal = int(st.sidebar.number_input('Number of reviews per proposal', min_value = 1, step = 1, format = "%d"))
 
 if st.sidebar.button('Optimize'):
 
