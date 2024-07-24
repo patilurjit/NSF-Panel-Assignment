@@ -200,4 +200,4 @@ if rankings_csv is not None:
 
 else:
     if st.sidebar.button('Optimize'):
-        st.error('The rankings matrix CSV file required to run the optimization is empty.')
+        st.error('The rankings matrix CSV file required to run the optimization is empty or has not been uploaded.')
