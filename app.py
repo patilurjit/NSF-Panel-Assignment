@@ -159,8 +159,7 @@ if st.sidebar.button('Optimize'):
     if not conflict_found:
         st.sidebar.success('No conflicts found in lead assignments.')
 
-    combined_assignments = np.full((num_proposals, num_reviewers), '-', dtype=object)
-    combined_assignments[:] = ''
+    combined_assignments = np.full((num_proposals, num_reviewers), '-', dtype = object)
 
     for proposal in range(num_proposals):
         for reviewer in range(num_reviewers):
