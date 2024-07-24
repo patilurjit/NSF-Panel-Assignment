@@ -12,7 +12,7 @@ num_reviewers = int(st.sidebar.number_input('Number of reviewers', min_value = 1
 reviews_per_proposal = int(st.sidebar.number_input('Number of reviews per proposal', min_value = 1, step = 1, format = "%d"))
 
 if rankings_csv is not None:
-    rankings = pd.read_csv(rankings_csv)
+    rankings = pd.read_csv(rankings_csv, header = None)
     rankings = rankings.to_numpy()
 
     if st.sidebar.button('Optimize'):
