@@ -2,39 +2,30 @@ import streamlit as st
 import numpy as np
 import pulp
 import pandas as pd
+import time
 
 st.title('NSF Panel Assignment')
 st.sidebar.title('Inputs')
 
-rankings_csv = st.sidebar.file_uploader("Upload a CSV file with rankings matrix", type = "csv")
+rankings_csv = st.sidebar.file_uploader("Upload a CSV file with rankings matrix", type = "xlsx")
 
 num_proposals = int(st.sidebar.number_input('Number of proposals', min_value = 1, step = 1, format = "%d"))
 num_reviewers = int(st.sidebar.number_input('Number of reviewers', min_value = 1, step = 1, format = "%d"))
 reviews_per_proposal = int(st.sidebar.number_input('Number of reviews per proposal', min_value = 1, step = 1, format = "%d"))
 
 if rankings_csv is not None:
-    rankings = pd.read_csv(rankings_csv, header = None)
+    rankings = pd.read_excel(rankings_csv, header = None)
     rankings = rankings.to_numpy()
 
     if st.sidebar.button('Optimize'):
+
+        start_time = time.time()
 
         total_reviews = num_proposals * reviews_per_proposal
 
         max_reviews_per_reviewer = int(np.ceil(total_reviews / num_reviewers))
         min_reviews_per_reviewer = int(np.floor(total_reviews / num_reviewers))
         extra_reviews = total_reviews % num_reviewers
-
-        # rankings = np.array([
-        #     [1, 2, 2, 1, 3, 2, 1, 2, 3, 1, 2, 3],
-        #     [2, 2, 1, 3, 2, 1, 1, 1, 2, 1, 3, 2],
-        #     [1, 2, 2, 1, 2, 3, 2, 1, 2, 1, 1, 2],
-        #     [1, 1, 2, 1, 3, 1, 1, 2, 3, 1, 2, 1],
-        #     [2, 1, 2, 2, 1, 3, 2, 3, 1, 1, 2, 2],
-        #     [1, 2, 3, 1, 1, 2, 2, 2, 2, 1, 2, 1],
-        #     [1, 2, 1, 1, 1, 2, 3, 1, 2, 3, 1, 1],
-        #     [3, 1, 3, 2, 1, 1, 1, 3, 2, 2, 3, 1],
-        #     [2, 1, 1, 2, 2, 1, 1, 2, 2, 2, 3, 1]
-        # ])
 
         num_vars = num_reviewers * num_proposals
 
@@ -64,6 +55,8 @@ if rankings_csv is not None:
         for i in range(num_reviewers):
             for j in range(num_proposals):
                 assignments[i, j] = pulp.value(x[i*num_proposals + j])
+
+        fval = prob.objective.value()
 
         conflicts = (assignments.astype(bool) & (rankings == 0))
         if np.any(conflicts):
@@ -197,6 +190,14 @@ if rankings_csv is not None:
 
         st.subheader('Summary:')
         st.table(summary_df.style.format("{:.0f}"))
+
+        st.subheader('Fval:')
+        st.write(f'The objective function value is {fval}.')
+
+        end_time = time.time()
+
+        st.subheader('Total simulation time:')
+        st.write(f'The total run time is {round(end_time - start_time, 2)} seconds.')
 
 else:
     if st.sidebar.button('Optimize'):
