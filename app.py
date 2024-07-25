@@ -3,32 +3,24 @@ import numpy as np
 import pulp
 import pandas as pd
 import time
+from io import BytesIO
+import base64
+
+def generate_rankings_matrix_template(num_reviewers, num_proposals):
+    rankings = np.zeros((num_reviewers, num_proposals))
+    column_names = [f'Proposal {i+1}' for i in range(num_proposals)]
+    row_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
+    rankings_sheet = pd.DataFrame(rankings, columns=column_names, index=row_names)
+
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        rankings_sheet.to_excel(writer, index=True, sheet_name='Rankings Matrix')
+
+    buffer.seek(0)
+    return buffer
 
 st.title('NSF Panel Assignment')
 st.sidebar.title('Inputs')
-
-# st.markdown("""
-#     <style>
-#     .full-width-table {
-#         width: 100%;
-#         overflow-x: auto;
-#         overflow-y: hidden;
-#     }
-#     .full-width-table table {
-#         width: 100%;
-#         table-layout: fixed;
-#     }
-#     .full-width-table th, .full-width-table td {
-#         text-align: center;
-#         overflow: hidden;
-#         text-overflow: ellipsis;
-#         white-space: nowrap;
-#     }
-#     .full-width-table th {
-#         min-width: 100px; /* Adjust this value to ensure header texts fit well */
-#     }
-#     </style>
-#     """, unsafe_allow_html=True)
 
 st.markdown("""
     <style>
@@ -58,23 +50,41 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-rankings_sheet = st.sidebar.file_uploader("Upload an Excel file with rankings matrix", type = "xlsx")
-
+# number_input inputs (variable)
 num_proposals = int(st.sidebar.number_input('Number of proposals', min_value = 1, step = 1, format = "%d"))
-num_reviewers = int(st.sidebar.number_input('Number of reviewers', min_value = 1, step = 1, format = "%d"))
 reviews_per_proposal = int(st.sidebar.number_input('Number of reviews per proposal', min_value = 1, step = 1, format = "%d"))
+max_reviews_per_reviewer = int(st.sidebar.number_input('Maximum number of reviews per reviewer', min_value = 1, step = 1, format = "%d"))
+
+# number_input inputs (fixed)
+total_reviews = num_proposals * reviews_per_proposal
+min_reviwers_val = int(np.ceil(total_reviews / max_reviews_per_reviewer))
+max_reviewers_val = total_reviews
+st.sidebar.markdown(f'Number of reviewers should be between {min_reviwers_val} and {max_reviewers_val}')
+# min_reviewers = st.sidebar.number_input('Minimum number of reviewers', min_value = min_reviwers_val, max_value = min_reviwers_val, step = 0, format = "%d")
+# max_reviewers = st.sidebar.number_input('Maximum number of reviewers', min_value = max_reviewers_val, max_value = max_reviewers_val, step = 0, format = "%d")
+num_reviewers = int(st.sidebar.number_input('Number of reviewers', min_value = min_reviwers_val, max_value = max_reviewers_val, step = 1, format = "%d"))
+
+# generate rankings matrix template
+if st.sidebar.button('Generate rankings matrix template'):
+    buffer = generate_rankings_matrix_template(num_reviewers, num_proposals)
+    b64 = base64.b64encode(buffer.getvalue()).decode()
+    href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="rankings_matrix_template.xlsx">Download the rankings matrix template</a>'
+    st.sidebar.markdown(href, unsafe_allow_html=True)
+
+# rankings matrix input
+rankings_sheet = st.sidebar.file_uploader("Upload the filled rankings matrix template", type = "xlsx")
 
 if rankings_sheet is not None:
-    rankings = pd.read_excel(rankings_sheet, header = None)
+    rankings = pd.read_excel(rankings_sheet, index_col = 0)
     rankings = rankings.to_numpy()
 
     if st.sidebar.button('Optimize'):
 
         start_time = time.time()
 
-        total_reviews = num_proposals * reviews_per_proposal
+        # total_reviews = num_proposals * reviews_per_proposal
 
-        max_reviews_per_reviewer = int(np.ceil(total_reviews / num_reviewers))
+        # max_reviews_per_reviewer = int(np.ceil(total_reviews / num_reviewers))
         min_reviews_per_reviewer = int(np.floor(total_reviews / num_reviewers))
         extra_reviews = total_reviews % num_reviewers
 
