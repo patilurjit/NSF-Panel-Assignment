@@ -3,18 +3,19 @@ import numpy as np
 import pulp
 import pandas as pd
 import time
+import openpyxl
 
 st.title('NSF Panel Assignment')
 st.sidebar.title('Inputs')
 
-rankings_csv = st.sidebar.file_uploader("Upload a CSV file with rankings matrix", type = "xlsx")
+rankings_sheet = st.sidebar.file_uploader("Upload an Excel file with rankings matrix", type = "xlsx")
 
 num_proposals = int(st.sidebar.number_input('Number of proposals', min_value = 1, step = 1, format = "%d"))
 num_reviewers = int(st.sidebar.number_input('Number of reviewers', min_value = 1, step = 1, format = "%d"))
 reviews_per_proposal = int(st.sidebar.number_input('Number of reviews per proposal', min_value = 1, step = 1, format = "%d"))
 
-if rankings_csv is not None:
-    rankings = pd.read_excel(rankings_csv, header = None)
+if rankings_sheet is not None:
+    rankings = pd.read_excel(rankings_sheet, header = None)
     rankings = rankings.to_numpy()
 
     if st.sidebar.button('Optimize'):
