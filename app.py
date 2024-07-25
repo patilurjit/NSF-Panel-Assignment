@@ -3,10 +3,60 @@ import numpy as np
 import pulp
 import pandas as pd
 import time
-import openpyxl
 
 st.title('NSF Panel Assignment')
 st.sidebar.title('Inputs')
+
+# st.markdown("""
+#     <style>
+#     .full-width-table {
+#         width: 100%;
+#         overflow-x: auto;
+#         overflow-y: hidden;
+#     }
+#     .full-width-table table {
+#         width: 100%;
+#         table-layout: fixed;
+#     }
+#     .full-width-table th, .full-width-table td {
+#         text-align: center;
+#         overflow: hidden;
+#         text-overflow: ellipsis;
+#         white-space: nowrap;
+#     }
+#     .full-width-table th {
+#         min-width: 100px; /* Adjust this value to ensure header texts fit well */
+#     }
+#     </style>
+#     """, unsafe_allow_html=True)
+
+st.markdown("""
+    <style>
+    .full-width-table {
+        width: 80%;
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+    .full-width-table table {
+        width: 80%;
+        table-layout: fixed;
+    }
+    .full-width-table th, .full-width-table td {
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 14px; /* Adjust the font size here */
+    }
+    .full-width-table th {
+        min-width: 100px; /* Adjust this value to ensure header texts fit well */
+        font-size: 16px; /* Adjust the font size for headers here */
+    }
+    .css-13sdm1b.e16nr0p33 {
+      margin-top: -75px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 rankings_sheet = st.sidebar.file_uploader("Upload an Excel file with rankings matrix", type = "xlsx")
 
@@ -173,24 +223,26 @@ if rankings_sheet is not None:
         row_names = [f'Proposal {i+1}' for i in range(num_proposals)]
         combined_assignments_df = pd.DataFrame(combined_assignments, columns=column_names, index=row_names)
         st.subheader('Combined assignments:')
-        st.table(combined_assignments_df)
+        st.write(combined_assignments_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
 
         column_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
-        fairness_metric_df = pd.DataFrame(fairness_metric.reshape(1, -1), columns=column_names)
+        fairness_metric_df = pd.DataFrame(fairness_metric.reshape(1, -1), index = ['Value'], columns=column_names)
+        fairness_metric_df = fairness_metric_df.round(2)
         st.subheader('Fairness metric:')
-        st.table(fairness_metric_df.style.format("{:.2f}"))
+        st.write(fairness_metric_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
 
         column_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
-        fairness_lsr_metric_df = pd.DataFrame(fairness_lsr_metric.reshape(1, -1), columns=column_names)
+        fairness_lsr_metric_df = pd.DataFrame(fairness_lsr_metric.reshape(1, -1), index = ['Value'], columns=column_names)
+        fairness_lsr_metric_df = fairness_lsr_metric_df.round(2)
         st.subheader('Fairness LSR metric:')
-        st.table(fairness_lsr_metric_df.style.format("{:.2f}"))
+        st.write(fairness_lsr_metric_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
 
         column_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
         reviews_result = reviews_count - lead_counts
-        summary_df = pd.DataFrame([lead_counts.flatten(), reviews_result.flatten()], index=["Leads", "Reviews"], columns = column_names) 
-
+        summary_df = pd.DataFrame([lead_counts.flatten(), reviews_result.flatten()], index=["Leads", "Reviews"], columns=column_names) 
+        summary_df = summary_df.astype(int)
         st.subheader('Summary:')
-        st.table(summary_df.style.format("{:.0f}"))
+        st.write(summary_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
 
         st.subheader('Fval:')
         st.write(f'The objective function value is {fval}.')
@@ -202,4 +254,4 @@ if rankings_sheet is not None:
 
 else:
     if st.sidebar.button('Optimize'):
-        st.error('The rankings matrix CSV file required to run the optimization is empty or has not been uploaded.')
+        st.error('The Excel file with the rankings matrix required to run the optimization is empty or has not been uploaded.')
