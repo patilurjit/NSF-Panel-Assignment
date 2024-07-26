@@ -6,19 +6,6 @@ import time
 from io import BytesIO
 import base64
 
-# def generate_rankings_matrix_template(num_reviewers, num_proposals):
-#     rankings = np.zeros((num_reviewers, num_proposals))
-#     column_names = [f'Proposal {i+1}' for i in range(num_proposals)]
-#     row_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
-#     rankings_sheet = pd.DataFrame(rankings, columns=column_names, index=row_names)
-
-#     buffer = BytesIO()
-#     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-#         rankings_sheet.to_excel(writer, index=True, sheet_name='Rankings Matrix')
-
-#     buffer.seek(0)
-#     return buffer
-
 def generate_rankings_matrix_template(num_reviewers, num_proposals):
     rankings = np.zeros((num_proposals, num_reviewers))
     column_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
@@ -73,8 +60,6 @@ total_reviews = num_proposals * reviews_per_proposal
 min_reviwers_val = int(np.ceil(total_reviews / max_reviews_per_reviewer))
 max_reviewers_val = total_reviews
 st.sidebar.markdown(f'Number of reviewers should be between {min_reviwers_val} and {max_reviewers_val}')
-# min_reviewers = st.sidebar.number_input('Minimum number of reviewers', min_value = min_reviwers_val, max_value = min_reviwers_val, step = 0, format = "%d")
-# max_reviewers = st.sidebar.number_input('Maximum number of reviewers', min_value = max_reviewers_val, max_value = max_reviewers_val, step = 0, format = "%d")
 num_reviewers = int(st.sidebar.number_input('Number of reviewers', min_value = min_reviwers_val, max_value = max_reviewers_val, step = 1, format = "%d"))
 
 # generate rankings matrix template
@@ -97,9 +82,6 @@ if rankings_sheet is not None:
 
             start_time = time.time()
 
-            # total_reviews = num_proposals * reviews_per_proposal
-
-            # max_reviews_per_reviewer = int(np.ceil(total_reviews / num_reviewers))
             min_reviews_per_reviewer = int(np.floor(total_reviews / num_reviewers))
             extra_reviews = total_reviews % num_reviewers
 
@@ -143,17 +125,11 @@ if rankings_sheet is not None:
             else:
                 st.sidebar.success('No conflicts found in the review assignments.')
 
-            fairness_metric = np.zeros((1, int(num_reviewers)))
+            fairness_metric = np.zeros(num_reviewers)
+            reviews_count = np.sum(assignments, 1)
 
-            for reviewer in range(int(num_reviewers)):
-                assigned_proposals = np.where(assignments[:, reviewer] == 1)[0]
-                strong_preferences = np.sum(rankings[reviewer, assigned_proposals] == 1)
-                medium_preferences = np.sum(rankings[reviewer, assigned_proposals] == 2)
-                low_preferences = np.sum(rankings[reviewer, assigned_proposals] == 3)
-
-                total_score = strong_preferences * 3 + medium_preferences * 2 + low_preferences * 1
-                max_possible_score = len(assigned_proposals) * 3
-                fairness_metric[0, reviewer] = total_score / max_possible_score * 100
+            for reviewer in range(num_reviewers):
+                fairness_metric[reviewer] = np.sum(assignments[reviewer, :] * rankings[reviewer, :]) / reviews_count[reviewer]
 
             lead_assignments = np.zeros((num_proposals, int(num_reviewers)))
             lead_counts = np.zeros((1, int(num_reviewers)))
@@ -212,17 +188,10 @@ if rankings_sheet is not None:
                     if lead_assignments[p, r] == 1 and assignments[r, p] == 0:
                         st.error(f'Error: Reviewer {r} is assigned as lead for proposal {p} but is not reviewing it.')
 
-            fairness_lsr_metric = np.zeros((1, num_reviewers))
+            fairness_lsr_metric = np.zeros(num_reviewers)
 
             for reviewer in range(num_reviewers):
-                assigned_as_lsr = np.where(lead_assignments[:, reviewer] == 1)[0]
-                strong_preferences = np.sum(rankings[reviewer, assigned_as_lsr] == 1)
-                medium_preferences = np.sum(rankings[reviewer, assigned_as_lsr] == 2)
-                low_preferences = np.sum(rankings[reviewer, assigned_as_lsr] == 3)
-
-                total_score = strong_preferences * 3 + medium_preferences * 2 + low_preferences * 1
-                max_possible_score = len(assigned_as_lsr) * 3
-                fairness_lsr_metric[0, reviewer] = total_score / max_possible_score * 100
+                fairness_lsr_metric[reviewer] = np.sum(lead_assignments[:, reviewer] * rankings[reviewer, :]) / lead_counts[0, reviewer]
 
             conflict_found = False
 
@@ -252,13 +221,11 @@ if rankings_sheet is not None:
 
             column_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
             fairness_metric_df = pd.DataFrame(fairness_metric.reshape(1, -1), index = ['Value'], columns=column_names)
-            fairness_metric_df = fairness_metric_df.round(2)
             st.subheader('Fairness metric:')
             st.write(fairness_metric_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
 
             column_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
             fairness_lsr_metric_df = pd.DataFrame(fairness_lsr_metric.reshape(1, -1), index = ['Value'], columns=column_names)
-            fairness_lsr_metric_df = fairness_lsr_metric_df.round(2)
             st.subheader('Fairness LSR metric:')
             st.write(fairness_lsr_metric_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
 
