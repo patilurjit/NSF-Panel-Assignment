@@ -6,15 +6,28 @@ import time
 from io import BytesIO
 import base64
 
+# def generate_rankings_matrix_template(num_reviewers, num_proposals):
+#     rankings = np.zeros((num_reviewers, num_proposals))
+#     column_names = [f'Proposal {i+1}' for i in range(num_proposals)]
+#     row_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
+#     rankings_sheet = pd.DataFrame(rankings, columns=column_names, index=row_names)
+
+#     buffer = BytesIO()
+#     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+#         rankings_sheet.to_excel(writer, index=True, sheet_name='Rankings Matrix')
+
+#     buffer.seek(0)
+#     return buffer
+
 def generate_rankings_matrix_template(num_reviewers, num_proposals):
-    rankings = np.zeros((num_reviewers, num_proposals))
-    column_names = [f'Proposal {i+1}' for i in range(num_proposals)]
-    row_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
-    rankings_sheet = pd.DataFrame(rankings, columns=column_names, index=row_names)
+    rankings = np.zeros((num_proposals, num_reviewers))
+    column_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
+    row_names = [f'Proposal {i+1}' for i in range(num_proposals)]
+    rankings_sheet = pd.DataFrame(rankings, columns = column_names, index = row_names)
 
     buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        rankings_sheet.to_excel(writer, index=True, sheet_name='Rankings Matrix')
+    with pd.ExcelWriter(buffer, engine = 'openpyxl') as writer:
+        rankings_sheet.to_excel(writer, index = True, sheet_name = 'Rankings Matrix')
 
     buffer.seek(0)
     return buffer
@@ -78,6 +91,7 @@ if rankings_sheet is not None:
     rankings = pd.read_excel(rankings_sheet, index_col = 0)
     if np.any(rankings != 0):
         rankings = rankings.to_numpy()
+        rankings = rankings.T
 
         if st.sidebar.button('Optimize'):
 
