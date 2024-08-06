@@ -28,6 +28,10 @@ def review_opt():
 
     prob.solve()
 
+    if pulp.LpStatus[prob.status] != 'Optimal':
+        st.error('No optimal solution found. Please try again with different inputs.')
+        return None, None
+    
     assignments = np.zeros((num_reviewers, num_proposals))
     for i in range(num_reviewers):
         for j in range(num_proposals):
@@ -58,6 +62,10 @@ def lead_opt(lead_counts, assignments):
 
     prob.solve()
 
+    if pulp.LpStatus[prob.status] != 'Optimal':
+        st.error('No optimal solution found. Please try again with different inputs.')
+        return None, None
+    
     lead_assignments = np.zeros((num_reviewers, num_proposals))
     for i in range(num_reviewers):
         for j in range(num_proposals):
@@ -90,8 +98,10 @@ def scribe_opt(max_scribe, min_scribe, assignments):
 
     prob.solve()
 
-    scribe_fval = prob.objective.value()
-
+    if pulp.LpStatus[prob.status] != 'Optimal':
+        st.error('No optimal solution found. Please try again with different inputs.')
+        return None, None
+    
     scribe_assignments = np.zeros((num_reviewers, num_proposals))
     for i in range(num_reviewers):
         for j in range(num_proposals):
@@ -109,7 +119,7 @@ def check_review_conflicts(assignments):
         st.error('Conflicts detected in the assignments:')
         reviewer_idx, proposal_idx = np.where(conflicts)
         for k in range(len(reviewer_idx)):
-            st.error(f'Reviewer {reviewer_idx[k]} assigned to Proposal {proposal_idx[k]} (conflict) \n')
+            st.error(f'Reviewer {reviewer_idx[k+1]} assigned to Proposal {proposal_idx[k+1]} (conflict) \n')
     else:
         st.sidebar.success('No conflicts found in the review assignments.')
 
@@ -119,7 +129,7 @@ def check_lead_conflicts(assignments):
         st.error('Conflicts detected in the assignments:')
         reviewer_idx, proposal_idx = np.where(conflicts)
         for k in range(len(reviewer_idx)):
-            st.error(f'Reviewer {reviewer_idx[k]} assigned to Proposal {proposal_idx[k]} (conflict) \n')
+            st.error(f'Reviewer {reviewer_idx[k+1]} assigned to Proposal {proposal_idx[k+1]} (conflict) \n')
     else:
         st.sidebar.success('No conflicts found in the lead assignments.')
 
@@ -129,7 +139,7 @@ def check_scribe_conflicts(assignments):
         st.error('Conflicts detected in the assignments:')
         reviewer_idx, proposal_idx = np.where(conflicts)
         for k in range(len(reviewer_idx)):
-            st.error(f'Reviewer {reviewer_idx[k]} assigned to Proposal {proposal_idx[k]} (conflict) \n')
+            st.error(f'Reviewer {reviewer_idx[k+1]} assigned to Proposal {proposal_idx[k+1]} (conflict) \n')
     else:
         st.sidebar.success('No conflicts found in the scribe assignments.')
 
@@ -138,21 +148,21 @@ def check_review_count(assignments):
 
     for proposal in range(num_proposals):
         if proposal_count[proposal] != reviews_per_proposal:
-            st.error(f'Proposal {proposal} does not have the required number of reviews.')
+            st.error(f'Proposal {proposal+1} does not have the required number of reviews.')
         
 def check_lead_count(assignments):
     proposal_count = np.sum(assignments, 0)
 
     for proposal in range(num_proposals):
         if proposal_count[proposal] != 1:
-            st.error(f'Proposal {proposal} does not have the required number of leads.')
+            st.error(f'Proposal {proposal+1} does not have the required number of leads.')
 
 def check_scribe_count(assignments):
     proposal_count = np.sum(assignments, 0)
 
     for proposal in range(num_proposals):
         if proposal_count[proposal] != 1:
-            st.error(f'Proposal {proposal} does not have the required number of scribes.')
+            st.error(f'Proposal {proposal+1} does not have the required number of scribes.')
 
 def make_combined_assignments(assignments, l_assignments, rankings):
     combined_assignments = np.full((num_proposals, num_reviewers), '-', dtype = object)
@@ -502,6 +512,12 @@ if st.sidebar.button('Optimize'):
         # rankings = generate_random_rankings(num_reviewers, num_proposals)
         if np.any(st.session_state['rankings'] != 0):
             rankings = st.session_state['rankings']
+            cols = [f'Reviewer {i+1}' for i in range(num_reviewers)]
+            rows = [f'Proposal {i+1}' for i in range(num_proposals)]
+            st.markdown('<h5>Rankings matrix:</h5>', unsafe_allow_html=True)
+            st.write(pd.DataFrame(rankings.T, columns=cols, index=rows))
+
+            start_time = time.time()
 
             min_reviews_per_reviewer = int(np.floor(total_reviews / num_reviewers))
             max_reviews_per_reviewer = int(np.ceil(total_reviews / num_reviewers))
@@ -514,6 +530,8 @@ if st.sidebar.button('Optimize'):
             if method == 'LSR':
                 # review assignment optimization
                 review_assignments, review_fval = review_opt()
+                if review_assignments is None or review_fval is None:
+                    st.stop()
                 
                 lead_assignments = np.zeros((num_proposals, reviews_per_proposal))
                 lead_counts = np.zeros(num_reviewers)
@@ -539,6 +557,8 @@ if st.sidebar.button('Optimize'):
 
                 # lead assignment optimization
                 lead_assignments, lead_fval = lead_opt(lead_counts, review_assignments)
+                if lead_assignments is None or lead_fval is None:
+                    st.stop()
 
                 # check for conflicts
                 check_review_conflicts(review_assignments)
@@ -565,6 +585,8 @@ if st.sidebar.button('Optimize'):
                 # generate rating reordered assignments
                 rating_combined_assignments_with_total = generate_rating_reordered_assignments(combined_assignments, review_assignments)
                 
+                end_time = time.time()
+
                 # display results
                 column_names = [f'Proposal {i + 1}' for i in range(num_proposals)]
                 fairness_prop_count_df = pd.DataFrame(fairness_prop_metric.reshape(1, -1), index = ['Value'], columns = column_names)
@@ -574,6 +596,19 @@ if st.sidebar.button('Optimize'):
 
                 column_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
                 fairness_lsr_metric_df = pd.DataFrame(fairness_lsr_metric.reshape(1, -1), index = ['Value'], columns=column_names)
+                
+                st.markdown('<h4>Results</h4>', unsafe_allow_html=True)
+
+                st.markdown(f'<h10>Objective function value for review assignment: {review_fval}</h10>', unsafe_allow_html=True)
+                st.markdown(f'<h10>Objective function value for combined assignment: {fval_combined}</h10>', unsafe_allow_html=True)
+
+                proposal_labels = [f'Proposal {i+1}' for i in range(num_proposals)]
+                reviewer_labels = [f'Reviewer {i+1}' for i in range(num_reviewers)]
+                combined_assignments_df = pd.DataFrame(combined_assignments, columns = reviewer_labels, index = proposal_labels)
+                st.markdown('<h5>Combined assignment matrix (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
+                # st.write(combined_assignments_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
+                st.write(combined_assignments_df)
+                st.write('')
 
                 st.markdown('<h5>Conflicts Reordered combined assignment matrix (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
                 # st.write(con_reordered_combined_assignments_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
@@ -588,14 +623,6 @@ if st.sidebar.button('Optimize'):
                 st.markdown('<h5>Rating Reordered combined assignment matrix (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
                 # st.write(rating_combined_assignments_with_total.to_html(classes='full-width-table'), unsafe_allow_html=True)
                 st.write(rating_combined_assignments_with_total)
-                st.write('')
-
-                proposal_labels = [f'Proposal {i+1}' for i in range(num_proposals)]
-                reviewer_labels = [f'Reviewer {i+1}' for i in range(num_reviewers)]
-                combined_assignments_df = pd.DataFrame(combined_assignments, columns = reviewer_labels, index = proposal_labels)
-                st.markdown('<h5>Combined assignment matrix (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
-                # st.write(combined_assignments_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
-                st.write(combined_assignments_df)
                 st.write('')
 
                 st.markdown('<h5>Fairness metric for each reviewer:</h5>', unsafe_allow_html=True)
@@ -635,10 +662,8 @@ if st.sidebar.button('Optimize'):
                 st.markdown('<h5>Fairness metric per proposal:</h5>', unsafe_allow_html=True)
                 # st.write(fairness_prop_count_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
                 st.write(fairness_prop_count_df)
-                st.write('')
 
-                st.markdown(f'<h10>Objective function value for review assignment: {review_fval}</h10>', unsafe_allow_html=True)
-                st.markdown(f'<h10>Objective function value for combined assignment: {fval_combined}</h10>', unsafe_allow_html=True)
+                st.markdown(f'<h10>Time taken for optimization: {end_time - start_time:.2f} seconds</h10>', unsafe_allow_html=True)
 
                 # create output sheet and download results
                 dataframes_with_sheets = [
@@ -666,208 +691,207 @@ if st.sidebar.button('Optimize'):
                     )
 
             elif method == 'LS_diff':
-                # # review assignment optimization
-                # review_assignments, review_fval = review_opt()
+                # review assignment optimization
+                review_assignments, review_fval = review_opt()
                 
-                # # lead assignment optimization
-                # lead_assignments = np.zeros((num_proposals, reviews_per_proposal))
-                # lead_counts = np.zeros(num_reviewers)
-                # proposals_assigned = np.zeros(num_proposals, dtype = bool)
+                # lead assignment optimization
+                lead_assignments = np.zeros((num_proposals, reviews_per_proposal))
+                lead_counts = np.zeros(num_reviewers)
+                proposals_assigned = np.zeros(num_proposals, dtype = bool)
 
-                # total_preferences = np.sum(rankings, 1)
-                # rankings_nan = rankings.astype(float)
-                # rankings_nan[rankings_nan == 0] = np.nan
-                # average_preferences = np.nanmean(rankings_nan, 1)
-                # reviews_count = np.sum(review_assignments, 1)
+                total_preferences = np.sum(rankings, 1)
+                rankings_nan = rankings.astype(float)
+                rankings_nan[rankings_nan == 0] = np.nan
+                average_preferences = np.nanmean(rankings_nan, 1)
+                reviews_count = np.sum(review_assignments, 1)
 
-                # data = np.column_stack((reviews_count.flatten(), average_preferences))
-                # df = pd.DataFrame(data, columns=['reviews_count', 'average_preferences'])
-                # sorted_df = df.sort_values(by=['reviews_count', 'average_preferences'], ascending=[True, True])
-                # sorted_reviewers = sorted_df.index.values
+                data = np.column_stack((reviews_count.flatten(), average_preferences))
+                df = pd.DataFrame(data, columns=['reviews_count', 'average_preferences'])
+                sorted_df = df.sort_values(by=['reviews_count', 'average_preferences'], ascending=[True, True])
+                sorted_reviewers = sorted_df.index.values
 
-                # round_robin_index = 0
+                round_robin_index = 0
 
-                # for lead in range(num_proposals):
-                #     reviewer = sorted_reviewers[round_robin_index]
-                #     lead_counts[reviewer] += 1
-                #     round_robin_index = (round_robin_index + 1) % int(num_reviewers)
+                for lead in range(num_proposals):
+                    reviewer = sorted_reviewers[round_robin_index]
+                    lead_counts[reviewer] += 1
+                    round_robin_index = (round_robin_index + 1) % int(num_reviewers)
 
-                # lead_assignments, lead_fval = lead_opt(lead_counts, review_assignments)
+                lead_assignments, lead_fval = lead_opt(lead_counts, review_assignments)
 
-                # # scribe assignment optimization
-                # new_assignments = review_assignments.T
-                # new_assignments = new_assignments - lead_assignments
-                # new_assignments = new_assignments.T
+                # scribe assignment optimization
+                new_assignments = review_assignments.T
+                new_assignments = new_assignments - lead_assignments
+                new_assignments = new_assignments.T
 
-                # min_scribe = int(np.floor(num_proposals / num_reviewers))
-                # max_scribe = int(np.ceil(num_proposals / num_reviewers))
+                min_scribe = int(np.floor(num_proposals / num_reviewers))
+                max_scribe = int(np.ceil(num_proposals / num_reviewers))
 
-                # num_vars = num_reviewers * num_proposals
+                num_vars = num_reviewers * num_proposals
 
-                # reviews_count = np.sum(new_assignments, 1)
-                # lead_counts = np.sum(lead_assignments, 0)
-                # scribe_counts0 = reviews_count - lead_counts
+                reviews_count = np.sum(new_assignments, 1)
+                lead_counts = np.sum(lead_assignments, 0)
+                scribe_counts0 = reviews_count - lead_counts
 
-                # new_rankings = rankings + scribe_counts0.T.reshape(-1, 1)
+                new_rankings = rankings + scribe_counts0.T.reshape(-1, 1)
 
-                # f = new_rankings.flatten().reshape(-1, 1)
+                f = new_rankings.flatten().reshape(-1, 1)
 
-                # scribe_assignments, scribe_fval = scribe_opt(max_scribe, min_scribe, new_assignments)
+                scribe_assignments, scribe_fval = scribe_opt(max_scribe, min_scribe, new_assignments)
 
-                # scribe_counts = np.sum(scribe_assignments, 0)
+                scribe_counts = np.sum(scribe_assignments, 0)
 
-                # # check for conflicts
-                # check_review_conflicts(review_assignments)
-                # check_lead_conflicts(lead_assignments)
-                # check_scribe_conflicts(scribe_assignments)
+                # check for conflicts
+                check_review_conflicts(review_assignments)
+                check_lead_conflicts(lead_assignments)
+                check_scribe_conflicts(scribe_assignments)
 
-                # # check for review count
-                # check_review_count(review_assignments)
+                # check for review count
+                check_review_count(review_assignments)
 
-                # # check for lead count
-                # check_lead_count(lead_assignments.T)
+                # check for lead count
+                check_lead_count(lead_assignments.T)
 
-                # # check for scribe count
-                # check_scribe_count(scribe_assignments.T)
+                # check for scribe count
+                check_scribe_count(scribe_assignments.T)
 
-                # # generate combined assignments
-                # combined_assignments, fval_combined = make_combined_assignments_with_scribe(review_assignments, lead_assignments, scribe_assignments, rankings)
+                # generate combined assignments
+                combined_assignments, fval_combined = make_combined_assignments_with_scribe(review_assignments, lead_assignments, scribe_assignments, rankings)
                 
-                # # calculate fairness metrics
-                # fairness_prop_metric, fairness_metric, fairness_l_metric, fairness_s_metric = calculate_fairness_metrics_with_scribe(review_assignments, lead_assignments, scribe_assignments, rankings, lead_counts, scribe_counts)
+                # calculate fairness metrics
+                fairness_prop_metric, fairness_metric, fairness_l_metric, fairness_s_metric = calculate_fairness_metrics_with_scribe(review_assignments, lead_assignments, scribe_assignments, rankings, lead_counts, scribe_counts)
 
-                # # generate conflict reordered assignments
-                # con_reordered_combined_assignments_df = generate_conflict_reordered_assignments_with_scribe(review_assignments, lead_assignments, scribe_assignments, rankings)
+                # generate conflict reordered assignments
+                con_reordered_combined_assignments_df = generate_conflict_reordered_assignments_with_scribe(review_assignments, lead_assignments, scribe_assignments, rankings)
 
-                # # generate leads reordered assignments
-                # lead_reordered_combined_assignments_df = generate_leads_reordered_assignments(lead_assignments, combined_assignments)
+                # generate leads reordered assignments
+                lead_reordered_combined_assignments_df = generate_leads_reordered_assignments(lead_assignments, combined_assignments)
 
-                # # generate rating reordered assignments
-                # rating_combined_assignments_with_total = generate_rating_reordered_assignments(combined_assignments, review_assignments)
+                # generate rating reordered assignments
+                rating_combined_assignments_with_total = generate_rating_reordered_assignments(combined_assignments, review_assignments)
 
-                # # display results
-                # column_names = [f'Proposal {i + 1}' for i in range(num_proposals)]
-                # fairness_prop_count_df = pd.DataFrame(fairness_prop_metric.reshape(1, -1), index = ['Value'], columns = column_names)
+                # display results
+                column_names = [f'Proposal {i + 1}' for i in range(num_proposals)]
+                fairness_prop_count_df = pd.DataFrame(fairness_prop_metric.reshape(1, -1), index = ['Value'], columns = column_names)
 
-                # column_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
-                # fairness_metric_df = pd.DataFrame(fairness_metric.reshape(1, -1), index = ['Value'], columns = column_names)
+                column_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
+                fairness_metric_df = pd.DataFrame(fairness_metric.reshape(1, -1), index = ['Value'], columns = column_names)
 
-                # column_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
-                # fairness_l_metric_df = pd.DataFrame(fairness_l_metric.reshape(1, -1), index = ['Value'], columns=column_names)
+                column_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
+                fairness_l_metric_df = pd.DataFrame(fairness_l_metric.reshape(1, -1), index = ['Value'], columns=column_names)
 
-                # column_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
-                # fairness_s_metric_df = pd.DataFrame(fairness_s_metric.reshape(1, -1), index = ['Value'], columns=column_names)
+                column_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
+                fairness_s_metric_df = pd.DataFrame(fairness_s_metric.reshape(1, -1), index = ['Value'], columns=column_names)
 
-                # st.markdown('<h5>Conflicts Reordered combined assignment matrix (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
-                # # st.write(con_reordered_combined_assignments_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
-                # st.write(con_reordered_combined_assignments_df)
-                # st.write('')
+                st.markdown('<h5>Conflicts Reordered combined assignment matrix (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
+                # st.write(con_reordered_combined_assignments_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
+                st.write(con_reordered_combined_assignments_df)
+                st.write('')
 
-                # st.markdown('<h5>Leads Reordered combined assignment matrix (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
-                # # st.write(lead_reordered_combined_assignments_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
-                # st.write(lead_reordered_combined_assignments_df)
-                # st.write('')
+                st.markdown('<h5>Leads Reordered combined assignment matrix (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
+                # st.write(lead_reordered_combined_assignments_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
+                st.write(lead_reordered_combined_assignments_df)
+                st.write('')
 
-                # st.markdown('<h5>Rating Reordered combined assignment matrix (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
-                # # st.write(rating_combined_assignments_with_total.to_html(classes='full-width-table'), unsafe_allow_html=True)
-                # st.write(rating_combined_assignments_with_total)
-                # st.write('')
+                st.markdown('<h5>Rating Reordered combined assignment matrix (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
+                # st.write(rating_combined_assignments_with_total.to_html(classes='full-width-table'), unsafe_allow_html=True)
+                st.write(rating_combined_assignments_with_total)
+                st.write('')
 
-                # proposal_labels = [f'Proposal {i+1}' for i in range(num_proposals)]
-                # reviewer_labels = [f'Reviewer {i+1}' for i in range(num_reviewers)]
+                proposal_labels = [f'Proposal {i+1}' for i in range(num_proposals)]
+                reviewer_labels = [f'Reviewer {i+1}' for i in range(num_reviewers)]
 
-                # combined_assignments_df = pd.DataFrame(combined_assignments, columns = reviewer_labels, index = proposal_labels)
-                # st.markdown('<h5>Combined assignment matrix (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
-                # # st.write(combined_assignments_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
-                # st.write(combined_assignments_df)
-                # st.write('')
+                combined_assignments_df = pd.DataFrame(combined_assignments, columns = reviewer_labels, index = proposal_labels)
+                st.markdown('<h5>Combined assignment matrix (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
+                # st.write(combined_assignments_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
+                st.write(combined_assignments_df)
+                st.write('')
 
-                # st.markdown('<h5>Fairness metric for each reviewer:</h5>', unsafe_allow_html=True)
-                # # st.write(fairness_metric_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
-                # st.write(fairness_metric_df)
-                # st.write('')
+                st.markdown('<h5>Fairness metric for each reviewer:</h5>', unsafe_allow_html=True)
+                # st.write(fairness_metric_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
+                st.write(fairness_metric_df)
+                st.write('')
 
-                # st.markdown('<h5>Fairness metric for each LSR:</h5>', unsafe_allow_html=True)
-                # # st.write(fairness_l_metric_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
-                # st.write(fairness_l_metric_df)
-                # st.write('')
+                st.markdown('<h5>Fairness metric for each LSR:</h5>', unsafe_allow_html=True)
+                # st.write(fairness_l_metric_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
+                st.write(fairness_l_metric_df)
+                st.write('')
 
-                # st.markdown('<h5>Fairness metric for each Scribe:</h5>', unsafe_allow_html=True)
-                # # st.write(fairness_s_metric_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
-                # st.write(fairness_s_metric_df)
-                # st.write('')
+                st.markdown('<h5>Fairness metric for each Scribe:</h5>', unsafe_allow_html=True)
+                # st.write(fairness_s_metric_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
+                st.write(fairness_s_metric_df)
+                st.write('')
 
-                # reviews_count_df = pd.DataFrame(reviews_count.reshape(1, -1), index = ['Value'], columns = [f'Reviewer {i + 1}' for i in range(num_reviewers)])
-                # st.markdown('<h5>Number of total reviews per reviewer:</h5>', unsafe_allow_html=True)
-                # # st.write(reviews_count_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
-                # st.write(reviews_count_df)
-                # st.write('')
+                reviews_count_df = pd.DataFrame(reviews_count.reshape(1, -1), index = ['Value'], columns = [f'Reviewer {i + 1}' for i in range(num_reviewers)])
+                st.markdown('<h5>Number of total reviews per reviewer:</h5>', unsafe_allow_html=True)
+                # st.write(reviews_count_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
+                st.write(reviews_count_df)
+                st.write('')
 
-                # lead_counts_df = pd.DataFrame(lead_counts.reshape(1, -1), index = ['Value'], columns = [f'Reviewer {i + 1}' for i in range(num_reviewers)])
-                # st.markdown('<h5>Number of leads per reviewer:</h5>', unsafe_allow_html=True)
-                # # st.write(lead_counts_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
-                # st.write(lead_counts_df)
-                # st.write('')
+                lead_counts_df = pd.DataFrame(lead_counts.reshape(1, -1), index = ['Value'], columns = [f'Reviewer {i + 1}' for i in range(num_reviewers)])
+                st.markdown('<h5>Number of leads per reviewer:</h5>', unsafe_allow_html=True)
+                # st.write(lead_counts_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
+                st.write(lead_counts_df)
+                st.write('')
 
-                # scribe_counts_df = pd.DataFrame(scribe_counts.reshape(1, -1), index = ['Value'], columns = [f'Reviewer {i + 1}' for i in range(num_reviewers)])
-                # st.markdown('<h5>Number of scribes per reviewer:</h5>', unsafe_allow_html=True)
-                # # st.write(scribe_counts_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
-                # st.write(scribe_counts_df)
+                scribe_counts_df = pd.DataFrame(scribe_counts.reshape(1, -1), index = ['Value'], columns = [f'Reviewer {i + 1}' for i in range(num_reviewers)])
+                st.markdown('<h5>Number of scribes per reviewer:</h5>', unsafe_allow_html=True)
+                # st.write(scribe_counts_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
+                st.write(scribe_counts_df)
 
-                # proposal_count_df = pd.DataFrame(np.sum(review_assignments, 0).reshape(1, -1), index = ['Value'], columns = proposal_labels)
-                # st.markdown('<h5>Number of reviews per proposal:</h5>', unsafe_allow_html=True)
-                # # st.write(proposal_count_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
-                # st.write(proposal_count_df)
-                # st.write('')
+                proposal_count_df = pd.DataFrame(np.sum(review_assignments, 0).reshape(1, -1), index = ['Value'], columns = proposal_labels)
+                st.markdown('<h5>Number of reviews per proposal:</h5>', unsafe_allow_html=True)
+                # st.write(proposal_count_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
+                st.write(proposal_count_df)
+                st.write('')
 
-                # lead_proposal_count_df = pd.DataFrame(np.sum(lead_assignments, 1).reshape(1, -1), index = ['Value'], columns = proposal_labels)
-                # st.markdown('<h5>Number of leads per proposal:</h5>', unsafe_allow_html=True)
-                # # st.write(lead_proposal_count_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
-                # st.write(lead_proposal_count_df)
-                # st.write('')
+                lead_proposal_count_df = pd.DataFrame(np.sum(lead_assignments, 1).reshape(1, -1), index = ['Value'], columns = proposal_labels)
+                st.markdown('<h5>Number of leads per proposal:</h5>', unsafe_allow_html=True)
+                # st.write(lead_proposal_count_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
+                st.write(lead_proposal_count_df)
+                st.write('')
 
-                # scribe_proposal_count_df = pd.DataFrame(np.sum(scribe_assignments, 1).reshape(1, -1), index = ['Value'], columns = proposal_labels)
-                # st.markdown('<h5>Number of scribes per proposal:</h5>', unsafe_allow_html=True)
-                # # st.write(scribe_proposal_count_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
-                # st.write(scribe_proposal_count_df)
-                # st.write('')
+                scribe_proposal_count_df = pd.DataFrame(np.sum(scribe_assignments, 1).reshape(1, -1), index = ['Value'], columns = proposal_labels)
+                st.markdown('<h5>Number of scribes per proposal:</h5>', unsafe_allow_html=True)
+                # st.write(scribe_proposal_count_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
+                st.write(scribe_proposal_count_df)
+                st.write('')
 
-                # st.markdown('<h5>Fairness metric per proposal:</h5>', unsafe_allow_html=True)
-                # # st.write(fairness_prop_count_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
-                # st.write(fairness_prop_count_df)
-                # st.write('')
+                st.markdown('<h5>Fairness metric per proposal:</h5>', unsafe_allow_html=True)
+                # st.write(fairness_prop_count_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
+                st.write(fairness_prop_count_df)
+                st.write('')
 
-                # st.markdown(f'<h10>Objective function value for review assignment: {review_fval}</h10>', unsafe_allow_html=True)
-                # st.markdown(f'<h10>Objective function value for combined assignment: {fval_combined}</h10>', unsafe_allow_html=True)
+                st.markdown(f'<h10>Objective function value for review assignment: {review_fval}</h10>', unsafe_allow_html=True)
+                st.markdown(f'<h10>Objective function value for combined assignment: {fval_combined}</h10>', unsafe_allow_html=True)
 
-                # # create output sheet and download results
-                # dataframes_with_sheets = [
-                #     (con_reordered_combined_assignments_df, 'Conflicts Reordered combined assignment matrix'),
-                #     (lead_reordered_combined_assignments_df, 'Leads Reordered combined assignment matrix'),
-                #     (rating_combined_assignments_with_total, 'Rating Reordered combined assignment matrix'),
-                #     (combined_assignments_df, 'Combined assignment matrix'),
-                #     (fairness_metric_df, 'Fairness metric'),
-                #     (fairness_l_metric_df, 'Fairness L metric'),
-                #     (fairness_s_metric_df, 'Fairness S metric'),
-                #     (reviews_count_df, 'Number of total reviews per reviewer'),
-                #     (lead_counts_df, 'Number of leads per reviewer'),
-                #     (scribe_counts_df, 'Number of scribes per reviewer'),
-                #     (proposal_count_df, 'Number of reviews per proposal'),
-                #     (lead_proposal_count_df, 'Number of leads per proposal'),
-                #     (scribe_proposal_count_df, 'Number of scribes per proposal'),
-                #     (fairness_prop_count_df, 'Fairness metric per proposal')
-                # ]
+                # create output sheet and download results
+                dataframes_with_sheets = [
+                    (con_reordered_combined_assignments_df, 'Conflicts Reordered combined assignment matrix'),
+                    (lead_reordered_combined_assignments_df, 'Leads Reordered combined assignment matrix'),
+                    (rating_combined_assignments_with_total, 'Rating Reordered combined assignment matrix'),
+                    (combined_assignments_df, 'Combined assignment matrix'),
+                    (fairness_metric_df, 'Fairness metric'),
+                    (fairness_l_metric_df, 'Fairness L metric'),
+                    (fairness_s_metric_df, 'Fairness S metric'),
+                    (reviews_count_df, 'Number of total reviews per reviewer'),
+                    (lead_counts_df, 'Number of leads per reviewer'),
+                    (scribe_counts_df, 'Number of scribes per reviewer'),
+                    (proposal_count_df, 'Number of reviews per proposal'),
+                    (lead_proposal_count_df, 'Number of leads per proposal'),
+                    (scribe_proposal_count_df, 'Number of scribes per proposal'),
+                    (fairness_prop_count_df, 'Fairness metric per proposal')
+                ]
 
-                # excel_buffer = create_excel_from_dataframe(dataframes_with_sheets)
+                excel_buffer = create_excel_from_dataframe(dataframes_with_sheets)
 
-                # if excel_buffer is not None:
-                #     st.download_button(
-                #         label="Download Excel file",
-                #         data=excel_buffer,
-                #         file_name="output.xlsx",
-                #         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                #     )
-                pass
+                if excel_buffer is not None:
+                    st.download_button(
+                        label="Download Excel file",
+                        data=excel_buffer,
+                        file_name="output.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
 
         else:
             st.error('The rankings matrix is empty.')
