@@ -356,25 +356,26 @@ def generate_leads_reordered_assignments(l_assignments, c_assignments):
     return lead_reordered_combined_assignments_df
 
 def generate_rating_reordered_assignments(c_assignments, assignments):
-    ratings = ['E', 'V', 'G', 'F', 'P', 'E/V', 'V/G', 'G/F', 'F/P']
-
-    num_proposals = c_assignments.shape[0]
-    num_reviewers = c_assignments.shape[1]
-
-    ratings_matrix = np.full((num_proposals, num_reviewers), '-', dtype = object)
-
-    for proposal in range(num_proposals):
-        for reviewer in range(num_reviewers):
-            if assignments[reviewer, proposal] != 0:
-                random_rating = np.random.choice(ratings)
-                ratings_matrix[proposal, reviewer] = random_rating
-            else:
-                ratings_matrix[proposal, reviewer] = '-'
-
     column_names = [f'Reviewer {i}' for i in range(1, num_reviewers + 1)]
     row_names = [f'Proposal {i+1}' for i in range(num_proposals)]
+    
+    if 'ratings' in st.session_state:
+        ratings_table = st.session_state['ratings']
+    
+    else:
+        ratings = ['E', 'V', 'G', 'F', 'P', 'E/V', 'V/G', 'G/F', 'F/P']
 
-    ratings_table = pd.DataFrame(ratings_matrix, columns = column_names, index = row_names)
+        ratings_matrix = np.full((num_proposals, num_reviewers), '-', dtype = object)
+
+        for proposal in range(num_proposals):
+            for reviewer in range(num_reviewers):
+                if assignments[reviewer, proposal] != 0:
+                    random_rating = np.random.choice(ratings)
+                    ratings_matrix[proposal, reviewer] = random_rating
+                else:
+                    ratings_matrix[proposal, reviewer] = '-'
+
+        ratings_table = pd.DataFrame(ratings_matrix, columns = column_names, index = row_names)
 
     ratings_matrix = ratings_table.to_numpy(dtype = str)
 
@@ -411,7 +412,7 @@ def generate_rating_reordered_assignments(c_assignments, assignments):
 
     rating_combined_assignments_with_total = pd.concat([sorted_combined_assignments_df, total_points_df], axis = 1)
 
-    return rating_combined_assignments_with_total
+    return ratings_table, rating_combined_assignments_with_total
 
 def generate_rankings_matrix_template(num_reviewers, num_proposals):
     rankings = np.zeros((num_proposals, num_reviewers))
@@ -422,6 +423,19 @@ def generate_rankings_matrix_template(num_reviewers, num_proposals):
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine = 'openpyxl') as writer:
         rankings_sheet.to_excel(writer, index = True, sheet_name = 'Rankings Matrix')
+
+    buffer.seek(0)
+    return buffer
+
+def generate_ratings_matrix_template(num_reviewers, num_proposals):
+    ratings = np.zeros((num_proposals, num_reviewers))
+    column_names = [f'Reviewer {i+1}' for i in range(num_reviewers)]
+    row_names = [f'Proposal {i+1}' for i in range(num_proposals)]
+    ratings_sheet = pd.DataFrame(ratings, columns = column_names, index = row_names)
+
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine = 'openpyxl') as writer:
+        ratings_sheet.to_excel(writer, index = True, sheet_name = 'Ratings Matrix')
 
     buffer.seek(0)
     return buffer
@@ -497,7 +511,6 @@ if st.sidebar.button('Generate rankings matrix template'):
 
 # rankings matrix input
 rankings_sheet = st.sidebar.file_uploader("Upload the filled rankings matrix template", type="xlsx")
-
 if rankings_sheet is not None:
     rankings_df = pd.read_excel(rankings_sheet, engine='openpyxl', index_col = 0)
     if rankings_df.empty or (rankings_df.select_dtypes(include=[np.number]) == 0).all().all():
@@ -506,6 +519,21 @@ if rankings_sheet is not None:
         st.session_state['rankings'] = rankings_df.to_numpy()
         st.session_state['rankings'] = st.session_state['rankings'].T
 
+# generate ratings matrix template
+if st.sidebar.button('Generate ratings matrix template'):
+    buffer = generate_ratings_matrix_template(num_reviewers, num_proposals)
+    b64 = base64.b64encode(buffer.getvalue()).decode()
+    href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="ratings_matrix_template.xlsx">Download the ratings matrix template</a>'
+    st.sidebar.markdown(href, unsafe_allow_html=True)
+
+# user ratings input
+user_ratings = st.sidebar.file_uploader("Upload the ratings", type="xlsx")
+if user_ratings is not None:
+    user_ratings_df = pd.read_excel(user_ratings, engine='openpyxl', index_col = 0)
+    if user_ratings_df.empty:
+        st.error('The uploaded ratings matrix is empty. Please upload a filled ratings matrix.')
+    else:
+        st.session_state['ratings'] = user_ratings_df
 
 if st.sidebar.button('Optimize'):
     if st.session_state['rankings'] is not None:
@@ -583,7 +611,7 @@ if st.sidebar.button('Optimize'):
                 lead_reordered_combined_assignments_df = generate_leads_reordered_assignments(lead_assignments, combined_assignments)
 
                 # generate rating reordered assignments
-                rating_combined_assignments_with_total = generate_rating_reordered_assignments(combined_assignments, review_assignments)
+                ratings_table_df, rating_combined_assignments_with_total = generate_rating_reordered_assignments(combined_assignments, review_assignments)
                 
                 end_time = time.time()
 
@@ -618,6 +646,10 @@ if st.sidebar.button('Optimize'):
                 st.markdown('<h5>Leads Reordered combined assignment matrix (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
                 # st.write(lead_reordered_combined_assignments_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
                 st.write(lead_reordered_combined_assignments_df)
+                st.write('')
+
+                st.markdown('<h5>Ratings (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
+                st.write(ratings_table_df)
                 st.write('')
 
                 st.markdown('<h5>Rating Reordered combined assignment matrix (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
@@ -667,10 +699,11 @@ if st.sidebar.button('Optimize'):
 
                 # create output sheet and download results
                 dataframes_with_sheets = [
+                    (combined_assignments_df, 'Combined assignment matrix'),
                     (con_reordered_combined_assignments_df, 'Conflicts Reordered combined assignment matrix'),
                     (lead_reordered_combined_assignments_df, 'Leads Reordered combined assignment matrix'),
+                    (ratings_table_df, 'Ratings'),
                     (rating_combined_assignments_with_total, 'Rating Reordered combined assignment matrix'),
-                    (combined_assignments_df, 'Combined assignment matrix'),
                     (fairness_metric_df, 'Fairness metric'),
                     (fairness_lsr_metric_df, 'Fairness LSR metric'),
                     (reviews_count_df, 'Number of total reviews per reviewer'),
@@ -768,7 +801,7 @@ if st.sidebar.button('Optimize'):
                 lead_reordered_combined_assignments_df = generate_leads_reordered_assignments(lead_assignments, combined_assignments)
 
                 # generate rating reordered assignments
-                rating_combined_assignments_with_total = generate_rating_reordered_assignments(combined_assignments, review_assignments)
+                ratings_table_df, rating_combined_assignments_with_total = generate_rating_reordered_assignments(combined_assignments, review_assignments)
 
                 # display results
                 column_names = [f'Proposal {i + 1}' for i in range(num_proposals)]
@@ -791,6 +824,10 @@ if st.sidebar.button('Optimize'):
                 st.markdown('<h5>Leads Reordered combined assignment matrix (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
                 # st.write(lead_reordered_combined_assignments_df.to_html(classes='full-width-table'), unsafe_allow_html=True)
                 st.write(lead_reordered_combined_assignments_df)
+                st.write('')
+
+                st.markdown('<h5>Ratings (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
+                st.write(ratings_table_df)
                 st.write('')
 
                 st.markdown('<h5>Rating Reordered combined assignment matrix (Proposals x Reviewers):</h5>', unsafe_allow_html=True)
@@ -867,10 +904,11 @@ if st.sidebar.button('Optimize'):
 
                 # create output sheet and download results
                 dataframes_with_sheets = [
+                    (combined_assignments_df, 'Combined assignment matrix'),
                     (con_reordered_combined_assignments_df, 'Conflicts Reordered combined assignment matrix'),
                     (lead_reordered_combined_assignments_df, 'Leads Reordered combined assignment matrix'),
+                    (ratings_table_df, 'Ratings'),
                     (rating_combined_assignments_with_total, 'Rating Reordered combined assignment matrix'),
-                    (combined_assignments_df, 'Combined assignment matrix'),
                     (fairness_metric_df, 'Fairness metric'),
                     (fairness_l_metric_df, 'Fairness L metric'),
                     (fairness_s_metric_df, 'Fairness S metric'),
