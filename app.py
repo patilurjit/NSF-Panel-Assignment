@@ -553,6 +553,7 @@ if st.sidebar.button('Download ratings matrix template'):
     b64 = base64.b64encode(buffer.getvalue()).decode()
     href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="ratings_matrix_template.xlsx">Download the ratings matrix template</a>'
     st.sidebar.markdown(href, unsafe_allow_html=True)
+    st.write(pd.DataFrame(st.session_state['rankings'].T, columns=[f'Reviewer {i+1}' for i in range(num_reviewers)], index=[f'Proposal {i+1}' for i in range(num_proposals)]))
 
 # user ratings input
 user_ratings = st.sidebar.file_uploader("Upload the ratings", type="xlsx")
