@@ -512,7 +512,7 @@ mos = st.radio("Method of Solution", ['Optimization', 'Logic'])
 # number_input inputs (variable)
 num_proposals = int(st.sidebar.number_input('Number of proposals', min_value = 1, step = 1, format = "%d"))
 reviews_per_proposal = int(st.sidebar.number_input('Number of reviews per proposal', min_value = 1, step = 1, format = "%d"))
-max_reviews_per_reviewer = int(st.sidebar.number_input('Maximum number of reviews per reviewer', min_value = 1, step = 1, format = "%d"))
+max_reviews_per_reviewer = int(st.sidebar.number_input('Maximum number of reviews per reviewer', value = 10, min_value = 1, step = 1, format = "%d"))
 
 # number_input inputs (fixed)
 total_reviews = num_proposals * reviews_per_proposal
